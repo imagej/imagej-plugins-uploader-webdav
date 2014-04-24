@@ -29,7 +29,7 @@
 
 	<ciManagement>
 		<system>Jenkins</system>
-		<url>http://jenkins.imagej.net/job/ImageJ-plugins-uploader-webdav/</url>
+		<url>http://jenkins.imagej.net/job/ImageJ-plugins-uploader-WebDAV/</url>
 	</ciManagement>
 
 	<repositories>
