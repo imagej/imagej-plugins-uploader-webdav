@@ -10,7 +10,7 @@
 	</parent>
 
 	<artifactId>imagej-plugins-uploader-webdav</artifactId>
-	<version>0.1.1-SNAPSHOT</version>
+	<version>0.1.1</version>
 
 	<name>ImageJ Plugins: Uploader: WebDAV</name>
 	<description>ImageJ Updater support for uploading via WebDAV.</description>
@@ -18,7 +18,7 @@
 	<scm>
 		<connection>scm:git:git://github.com/imagej/imagej-plugins-uploader-webdav</connection>
 		<developerConnection>scm:git:git@github.com:imagej/imagej-plugins-uploader-webdav</developerConnection>
-		<tag>HEAD</tag>
+		<tag>imagej-plugins-uploader-webdav-0.1.1</tag>
 		<url>https://github.com/imagej/imagej-plugins-uploader-webdav</url>
 	</scm>
 
