@@ -1,3 +1,5 @@
+![](http://jenkins.imagej.net/job/ImageJ-plugins-uploader-WebDAV/lastBuild/badge/icon)
+
 ImageJ Plugins: Uploader: WebDAV
 --------------------------------
 
