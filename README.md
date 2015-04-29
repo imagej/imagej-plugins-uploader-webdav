@@ -1,4 +1,4 @@
-![](http://jenkins.imagej.net/job/ImageJ-plugins-uploader-WebDAV/lastBuild/badge/icon)
+[![](http://jenkins.imagej.net/job/ImageJ-plugins-uploader-WebDAV/lastBuild/badge/icon)](http://jenkins.imagej.net/job/ImageJ-plugins-uploader-WebDAV/)
 
 ImageJ Plugins: Uploader: WebDAV
 --------------------------------
