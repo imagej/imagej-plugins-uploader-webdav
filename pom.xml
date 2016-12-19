@@ -3,17 +3,30 @@
 	<modelVersion>4.0.0</modelVersion>
 
 	<parent>
-		<groupId>net.imagej</groupId>
-		<artifactId>pom-imagej</artifactId>
-		<version>5.0</version>
+		<groupId>org.scijava</groupId>
+		<artifactId>pom-scijava</artifactId>
+		<version>12.0.0</version>
 		<relativePath />
 	</parent>
 
+	<groupId>net.imagej</groupId>
 	<artifactId>imagej-plugins-uploader-webdav</artifactId>
 	<version>0.2.1-SNAPSHOT</version>
 
 	<name>ImageJ Plugins: Uploader: WebDAV</name>
 	<description>ImageJ Updater support for uploading via WebDAV.</description>
+	<url>http://imagej.net/ImageJ_Plugins_Uploader_WebDAV</url>
+	<inceptionYear>2009</inceptionYear>
+	<organization>
+		<name>ImageJ</name>
+		<url>http://imagej.net/</url>
+	</organization>
+	<licenses>
+		<license>
+			<name>Simplified BSD License</name>
+			<distribution>repo</distribution>
+		</license>
+	</licenses>
 
 	<developers>
 		<developer>
@@ -39,6 +52,13 @@
 		</contributor>
 	</contributors>
 
+	<mailingLists>
+		<mailingList>
+			<name>ImageJ Forum</name>
+			<archive>http://forum.imagej.net/</archive>
+		</mailingList>
+	</mailingLists>
+
 	<scm>
 		<connection>scm:git:git://github.com/imagej/imagej-plugins-uploader-webdav</connection>
 		<developerConnection>scm:git:git@github.com:imagej/imagej-plugins-uploader-webdav</developerConnection>
@@ -53,6 +73,15 @@
 		<system>Jenkins</system>
 		<url>http://jenkins.imagej.net/job/ImageJ-plugins-uploader-WebDAV/</url>
 	</ciManagement>
+
+	<properties>
+		<package-name>net.imagej.plugins.uploaders.webdav</package-name>
+		<license.licenseName>bsd_2</license.licenseName>
+		<license.copyrightOwners>Board of Regents of the University of
+Wisconsin-Madison, Broad Institute of MIT and Harvard, and Max Planck
+Institute of Molecular Cell Biology and Genetics.</license.copyrightOwners>
+		<license.projectName>ImageJ software for multidimensional image processing and analysis.</license.projectName>
+	</properties>
 
 	<repositories>
 		<repository>
