@@ -15,6 +15,30 @@
 	<name>ImageJ Plugins: Uploader: WebDAV</name>
 	<description>ImageJ Updater support for uploading via WebDAV.</description>
 
+	<developers>
+		<developer>
+			<id>ctrueden</id>
+			<name>Curtis Rueden</name>
+			<url>http://imagej.net/User:Rueden</url>
+			<roles>
+				<role>founder</role>
+				<role>lead</role>
+				<role>debugger</role>
+				<role>reviewer</role>
+				<role>support</role>
+				<role>maintainer</role>
+			</roles>
+		</developer>
+	</developers>
+	<contributors>
+		<contributor>
+			<name>Johannes Schindelin</name>
+			<url>http://imagej.net/User:Schindelin</url>
+			<roles><role>founder</role></roles>
+			<properties><id>dscho</id></properties>
+		</contributor>
+	</contributors>
+
 	<scm>
 		<connection>scm:git:git://github.com/imagej/imagej-plugins-uploader-webdav</connection>
 		<developerConnection>scm:git:git@github.com:imagej/imagej-plugins-uploader-webdav</developerConnection>
