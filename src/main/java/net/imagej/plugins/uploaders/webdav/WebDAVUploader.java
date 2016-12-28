@@ -413,7 +413,15 @@ public class WebDAVUploader extends AbstractUploader {
 			final HttpURLConnection connection = connect("OPTIONS", new URL(baseURL), null);
 			connection.connect();
 			final String allow = connection.getHeaderField("Allow");
-			return allow != null && allow.contains("LOCK");
+			if (allow == null) {
+				log.error("Failed to retrieve OPTIONS for WebDAV actions");
+				return false;
+			}
+			if (!allow.contains("LOCK")) {
+				log.error("LOCK action not allowed; valid actions: " + allow);
+				return false;
+			}
+			return true;
 		}
 		catch (final Exception e) {
 			log.error(e);
