@@ -412,9 +412,10 @@ public class WebDAVUploader extends AbstractUploader {
 		try {
 			final HttpURLConnection connection = connect("OPTIONS", new URL(baseURL), null);
 			connection.connect();
-			String allow = connection.getHeaderField("Allow");
+			final String allow = connection.getHeaderField("Allow");
 			return allow != null && allow.contains("LOCK");
-		} catch (Exception e) {
+		}
+		catch (final Exception e) {
 			log.error(e);
 		}
 		return false;
