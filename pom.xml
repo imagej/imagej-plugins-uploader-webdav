@@ -70,8 +70,8 @@
 		<url>http://github.com/imagej/imagej-plugins-uploader-webdav/issues</url>
 	</issueManagement>
 	<ciManagement>
-		<system>Jenkins</system>
-		<url>http://jenkins.imagej.net/job/ImageJ-plugins-uploader-WebDAV/</url>
+		<system>Travis CI</system>
+		<url>https://travis-ci.org/imagej/imagej-plugins-uploader-webdav</url>
 	</ciManagement>
 
 	<properties>
