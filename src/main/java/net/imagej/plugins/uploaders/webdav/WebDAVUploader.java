@@ -31,40 +31,22 @@
 
 package net.imagej.plugins.uploaders.webdav;
 
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.UnsupportedEncodingException;
-import java.lang.reflect.Field;
-import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.net.URLEncoder;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import javax.xml.parsers.ParserConfigurationException;
-
 import net.iharder.Base64;
 import net.imagej.plugins.uploaders.webdav.NetrcParser.Credentials;
-import net.imagej.updater.AbstractUploader;
-import net.imagej.updater.FilesUploader;
-import net.imagej.updater.UpdateSite;
-import net.imagej.updater.Uploadable;
-import net.imagej.updater.Uploader;
+import net.imagej.updater.*;
 import net.imagej.updater.util.UpdaterUserInterface;
 import net.imagej.updater.util.UpdaterUtil;
-
 import org.scijava.log.LogService;
 import org.scijava.log.StderrLogService;
 import org.scijava.plugin.Plugin;
 import org.scijava.util.XML;
 import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
+
+import javax.xml.parsers.ParserConfigurationException;
+import java.io.*;
+import java.net.*;
+import java.util.*;
 
 /**
  * Uploads files to an update server using WebDAV.
@@ -79,12 +61,6 @@ public class WebDAVUploader extends AbstractUploader {
 	private LogService log;
 	private boolean debug = false;
 
-	/**
-	 * The {@link HttpURLConnection} does not accept the WebDAV-specific verbs
-	 * we want to pass to the server. Hence we need to use ugly reflection...
-	 */
-	private static Field methodField;
-
 	@Override
 	public String getProtocol() {
 		return "webdav";
@@ -96,13 +72,6 @@ public class WebDAVUploader extends AbstractUploader {
 
 		log = uploader.getLog();
 		debug = log.isDebug();
-
-		if (methodField == null) try {
-			 methodField = HttpURLConnection.class.getDeclaredField("method");
-			 methodField.setAccessible(true);
-		} catch (Throwable t) {
-			log.error(t);
-		}
 
 		String host = uploader.getUploadHost();
 		if (!"".equals(host)) {
@@ -454,13 +423,6 @@ public class WebDAVUploader extends AbstractUploader {
 			log.setLevel(LogService.DEBUG);
 			debug = true;
 		}
-
-		if (methodField == null) try {
-			 methodField = HttpURLConnection.class.getDeclaredField("method");
-			 methodField.setAccessible(true);
-		} catch (Throwable t) {
-			log.error(t);
-		}
 	}
 
 	protected HttpURLConnection connect(final String method, final URL url, final String xml, final String... headers) throws IOException {
@@ -531,23 +493,14 @@ public class WebDAVUploader extends AbstractUploader {
 	// -- reflected field made accessible
 
 	private String getRequestMethod(final HttpURLConnection connection) {
-		if (methodField == null) return null;
-		try {
-			return (String)methodField.get(connection);
-		} catch (IllegalArgumentException e) {
-			log.error(e);
-		} catch (IllegalAccessException e) {
-			log.error(e);
-		}
-		return null;
+		return connection.getRequestMethod();
 	}
 
 	private void setRequestMethod(final HttpURLConnection connection, final String method) {
-		if (methodField == null) return;
 		try {
-			methodField.set(connection, method);
-		} catch (IllegalAccessException e) {
-			log.error(e);
+			connection.setRequestMethod(method);
+		} catch (ProtocolException e) {
+			e.printStackTrace();
 		}
 	}
 
