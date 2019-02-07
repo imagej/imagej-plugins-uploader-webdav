@@ -107,10 +107,16 @@ Institute of Molecular Cell Biology and Genetics.</license.copyrightOwners>
 		</dependency>
 
 		<!-- Third-party dependencies -->
+
 		<dependency>
-			<groupId>net.iharder</groupId>
-			<artifactId>base64</artifactId>
-			<version>2.3.8</version>
+			<groupId>org.apache.jackrabbit</groupId>
+			<artifactId>jackrabbit-webdav</artifactId>
+			<version>3.0-SNAPSHOT</version>
+		</dependency>
+
+		<dependency>
+			<groupId>commons-io</groupId>
+			<artifactId>commons-io</artifactId>
 		</dependency>
 
 		<!-- Test dependencies -->

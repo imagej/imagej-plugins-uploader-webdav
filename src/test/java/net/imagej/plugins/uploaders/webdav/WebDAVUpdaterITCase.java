@@ -31,14 +31,14 @@
 
 package net.imagej.plugins.uploaders.webdav;
 
-import java.io.IOException;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-import net.imagej.plugins.uploaders.webdav.WebDAVUploader;
+import net.imagej.Sourced;
 import net.imagej.updater.AbstractUploaderTestBase;
-
+import org.apache.commons.httpclient.Header;
+import org.apache.jackrabbit.webdav.client.methods.DeleteMethod;
 import org.junit.Test;
+
+import java.io.IOException;
+import java.net.URL;
 
 /**
  * A conditional JUnit test for uploading via WebDAV.
@@ -84,12 +84,22 @@ public class WebDAVUpdaterITCase extends AbstractUploaderTestBase {
 		public void delete(final String path) throws IOException {
 			final URL target = new URL(url + path);
 			final boolean isDirectory = path.endsWith("/");
-			final HttpURLConnection connection = isDirectory ?
-					connect("DELETE", target, null) :
-					connect("DELETE", target, null, "Depth", "Infinity");
-			int code = connection.getResponseCode();
+			DeleteMethod httpMethod = new DeleteMethod(target.toString());
+			httpMethod.setRequestHeader("User-Agent", "Java");
+			if(!isDirectory)
+				httpMethod.setRequestHeader("Depth", "Infinity");
+			System.out.println("Sending request " + httpMethod.getName() + " " + httpMethod.getURI());
+			for (Header header : httpMethod.getRequestHeaders()) {
+				System.out.println("Header: " + header.getName() + " = " + header.getValue());
+			}
+
+			client.executeMethod(httpMethod);
+
+			int code = httpMethod.getStatusCode();
 			if (code > 299) {
-				throw new IOException("Could not delete " + url + ": " + code + " " + connection.getResponseMessage());
+				throw new IOException("Could not delete " + target + ": " + httpMethod.getStatusLine());
+			}else {
+				System.out.println("Successfully deleted " + target + ".");
 			}
 		}
 	}

@@ -31,23 +31,31 @@
 
 package net.imagej.plugins.uploaders.webdav;
 
-import net.iharder.Base64;
 import net.imagej.plugins.uploaders.webdav.NetrcParser.Credentials;
 import net.imagej.updater.*;
 import net.imagej.updater.util.UpdaterUserInterface;
 import net.imagej.updater.util.UpdaterUtil;
+import org.apache.commons.httpclient.*;
+import org.apache.commons.httpclient.auth.AuthScope;
+import org.apache.commons.httpclient.methods.InputStreamRequestEntity;
+import org.apache.commons.httpclient.methods.RequestEntity;
+import org.apache.commons.httpclient.util.DateUtil;
+import org.apache.commons.io.input.CountingInputStream;
+import org.apache.jackrabbit.webdav.client.methods.*;
+import org.apache.jackrabbit.webdav.lock.Scope;
+import org.apache.jackrabbit.webdav.lock.Type;
+import org.apache.jackrabbit.webdav.property.DavPropertyNameSet;
 import org.scijava.log.LogService;
 import org.scijava.log.StderrLogService;
 import org.scijava.plugin.Plugin;
-import org.scijava.util.XML;
-import org.w3c.dom.NodeList;
-import org.xml.sax.SAXException;
 
-import javax.xml.parsers.ParserConfigurationException;
-import java.io.*;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
-import java.net.*;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.URLEncoder;
 import java.util.*;
 
 /**
@@ -61,31 +69,11 @@ public class WebDAVUploader extends AbstractUploader {
 	private String baseURL,username, password;
 	private Set<String> existingDirectories;
 	private LogService log;
-	private boolean debug = false;
+	private boolean debug = true;
+	protected HttpClient client;
 
 	public WebDAVUploader() {
-		try {
-			Field methodsField = HttpURLConnection.class.getDeclaredField("methods");
-			methodsField.setAccessible(true);
-			// get the methods field modifiers
-			Field modifiersField = Field.class.getDeclaredField("modifiers");
-			// bypass the "private" modifier
-			modifiersField.setAccessible(true);
-
-			// remove the "final" modifier
-			modifiersField.setInt(methodsField, methodsField.getModifiers() & ~Modifier.FINAL);
-
-			/* valid HTTP methods */
-			String[] methods = {
-					"GET", "POST", "HEAD", "OPTIONS", "PUT", "DELETE", "TRACE", "PATCH",
-					"LOCK", "UNLOCK", "MOVE", "PROPFIND", "MKCOL"
-			};
-			// set the new methods - including patch
-			methodsField.set(null, methods);
-
-		} catch (SecurityException | IllegalArgumentException | IllegalAccessException | NoSuchFieldException e) {
-			e.printStackTrace();
-		}
+		client = new HttpClient();
 	}
 
 	@Override
@@ -145,7 +133,9 @@ public class WebDAVUploader extends AbstractUploader {
 
 		if (!baseURL.endsWith("/")) baseURL += "/";
 
-		existingDirectories = new HashSet<String>();
+		existingDirectories = new HashSet<>();
+
+		setCredentials(username, password);
 
 		if (!isAllowed()) {
 			UpdaterUserInterface.get().error("User " + username + " lacks upload permissions for " + baseURL);
@@ -203,33 +193,53 @@ public class WebDAVUploader extends AbstractUploader {
 				int currentCount = 0;
 				final int currentTotal = (int) source.getFilesize();
 				String token = tokens.get(target);
-				final HttpURLConnection connection;
 				URL url = getURL(target, false);
-				if (token == null) {
-					connection = connect("PUT", url, null);
-				} else {
-					connection = connect("PUT", url, null, "If", "<" + url + "> (<" + token + ">)");
+
+				PutMethod httpMethod = new PutMethod(url.toString());
+				if(token != null) {
+					httpMethod.setRequestHeader("If", "<" + url + "> (<" + token + ">)");
 				}
-				connection.setRequestProperty("Content-Length", "" + source.getFilesize());
-				connection.setDoOutput(true);
-				final OutputStream out = connection.getOutputStream(); 
+				httpMethod.setRequestHeader("Content-Length", "" + source.getFilesize());
+
+				CountingInputStream cis = new CountingInputStream(input);
+
+				RequestEntity requestEntity = new InputStreamRequestEntity(cis);
+				httpMethod.setRequestEntity(requestEntity);
+
+				Thread thread = new Thread(() -> {
+					try {
+						runMethodOnClient(httpMethod);
+					} catch (HttpException e) {
+						System.err.println("Fatal protocol violation: " + e.getMessage());
+						e.printStackTrace();
+					} catch (IOException e) {
+						System.err.println("Fatal transport error: " + e.getMessage());
+						e.printStackTrace();
+					} finally {
+						httpMethod.releaseConnection();
+					}
+
+				});
+
+				thread.start();
+
 				for (;;) {
-					final int len = input.read(buf, 0, buf.length);
-					if (len <= 0) break;
-					out.write(buf, 0, len);
-					currentCount += len;
+					if (!thread.isAlive()) break;
+					currentCount = (int)cis.getByteCount();
 					setItemCount(currentCount, currentTotal);
 					setCount(count + currentCount, total);
 				}
-				input.close();
 				count += currentCount;
-				out.close();
+				cis.close();
 				itemDone(source);
-				int code = connection.getResponseCode();
-				if (code != 201 && code != 204) {
-					log.error("Code: " + code + " " + connection.getResponseMessage());
+				int code = httpMethod.getStatusCode();
+				if (!httpMethod.succeeded()) {
+					log.error("Code: " + code + " " + httpMethod.getStatusLine());
 					throw new IOException("Could not write " + target);
+				} else {
+					log.info("Upload of " + target + " successful.");
 				}
+
 			}
 			done();
 
@@ -260,37 +270,56 @@ public class WebDAVUploader extends AbstractUploader {
 		}
 	}
 
-	private String lock(final String path) throws IOException {
-		String xml = "<?xml version=\"1.0\" encoding=\"utf-8\" ?>" 
-			+ "<lockinfo xmlns='DAV:'>"
-			+ "<lockscope><exclusive/></lockscope>"
-			+ "<locktype><write/></locktype>" 
-			+ "<owner>"
-			+ "<href>" + baseURL + "User:" + username + "</href>"
-			+ "</owner>"
-			+ "</lockinfo>";
-		try {
-			final HttpURLConnection connection = connect("LOCK", getURL(path, false), xml, "Timeout", "Second-600");
-
-			if (connection.getResponseCode() != 200) {
-				throw new IOException("Error obtaining lock for " + path + ": "
-					+ connection.getResponseCode() + " " + connection.getResponseMessage());
+	private void runMethodOnClient(HttpMethod httpMethod) throws IOException {
+		httpMethod.setRequestHeader("User-Agent", "Java");
+		if (debug) {
+			log.debug("Sending request " + httpMethod.getName() + " " + httpMethod.getURI());
+			for (Header header : httpMethod.getRequestHeaders()) {
+				log.debug("Header: " + header.getName() + " = " + header.getValue());
 			}
+		}
+		client.executeMethod(httpMethod);
+		if (debug) {
+			log.debug("Response: " + httpMethod.getStatusCode() + " " + httpMethod.getStatusLine());
+			for (Header header : httpMethod.getResponseHeaders()) {
+				log.debug("Header: " + header.getName() + " = " + header.getValue());
+			}
+		}
+	}
 
+	private String lock(final String path) throws IOException {
+		try {
+
+			LockMethod httpMethod = new LockMethod(getURL(path, false).toString(),
+					Scope.EXCLUSIVE, Type.WRITE, username, (long)(600*60), false);
+			//TODO test if one can remove these headers
+			httpMethod.setRequestHeader("Timeout", "Second-600");
+			httpMethod.setRequestHeader("Brief", "t");
+			httpMethod.setRequestHeader("Content-Type", "text/xml; charset=\"utf-8\"");
+
+			runMethodOnClient(httpMethod);
+
+			int statusCode = httpMethod.getStatusCode();
+			if (!httpMethod.succeeded()) System.err.println("Error obtaining lock for " + path + ": " + httpMethod.getStatusLine());
+			else {
+				log.info("Successfully locked " + path + ".");
+			}
 			if (timestamp < 0) {
-				timestamp = Long.parseLong(UpdaterUtil.timestamp(connection.getHeaderFieldDate("Date", -1)));
+				Date date = DateUtil.parseDate(httpMethod.getResponseHeader("Date").getValue());
+				Calendar cal = Calendar.getInstance();
+				cal.setTime(date);
+				timestamp = Long.parseLong(UpdaterUtil.timestamp(cal));
 				if (timestamp < 0) {
 					throw new IOException("Could not obtain date from the server");
 				}
 			}
 
-			final XML result = new XML(connection.getInputStream());
-			final String token = result.cdata("/prop/lockdiscovery/activelock/locktoken/href");
+			final String token = httpMethod.getLockToken();
 			if (debug) {
-				log.info("Tried to obtain a lock (" + token + "):\n" + result);
+				log.info("Tried to obtain a lock (" + token + "):\n" + httpMethod.getResponseBodyAsString());
 			}
 			if (token == null) {
-				log.error("Expected lock for '" + path + "', got:\n" + result.toString());
+				log.error("Expected lock for '" + path + "', got:\n" + httpMethod.getResponseBodyAsString());
 				throw new IOException("Could not obtain lock for " + path);
 			}
 			return token;
@@ -304,10 +333,14 @@ public class WebDAVUploader extends AbstractUploader {
 
 	private boolean unlock(final String path, final String token) {
 		try {
-			final HttpURLConnection connection = connect("UNLOCK", getURL(path, false), null, "Lock-Token", "<" + token + ">");
-			int code = connection.getResponseCode();
-			if (code == 204) return true;
-			log.error("Error removing lock from " + path + ": " + code + " " + connection.getResponseMessage());
+			UnLockMethod httpMethod = new UnLockMethod(getURL(path, false).toString(), token);
+			httpMethod.setRequestHeader("Content-Type", "application/octet-stream");
+			client.executeMethod(httpMethod);
+
+			if (!httpMethod.succeeded()) System.err.println("Error removing lock from " + path + ": " + httpMethod.getStatusLine());
+			else {
+				log.info("Successfully unlocked " + path + ".");
+			}
 		} catch (Exception e) {
 			log.error(e);
 		}
@@ -316,15 +349,22 @@ public class WebDAVUploader extends AbstractUploader {
 
 	private boolean move(final String source, final String target, final String token, boolean force) {
 		try {
-			final URL url = getURL(source, false);
+			final String url = getURL(source, false).toString();
 			final String targetURL = getURL(target, false).toString();
-			final HttpURLConnection connection = connect("MOVE", url, null,
-					"Destination", targetURL,
-					"Overwrite", force ? "T" : "F",
-					"If", "<" + url + "> (<" + token + ">)");
-			int code = connection.getResponseCode();
-			if (code == 201 || code == 204) return true;
-			log.error("Error moving " + source + " to " + target + ": " + code + " " + connection.getResponseMessage());
+			MoveMethod httpMethod = new MoveMethod(url, targetURL, force);
+			httpMethod.setRequestHeader("Content-Type", "application/octet-stream");
+			if(token != null)
+				httpMethod.setRequestHeader("If", "<" + url + "> (<" + token + ">)");
+
+			System.out.println("Token: " + "<" + url + "> (<" + token + ">)");
+
+			runMethodOnClient(httpMethod);
+
+			if (httpMethod.succeeded()) {
+				log.info("Successfully moved  " + source + " to " + target + ".");
+				return true;
+			}
+			log.error("Error moving " + source + " to " + target + ": " + httpMethod.getStatusLine());
 		} catch (Exception e) {
 			log.error(e);
 		}
@@ -358,47 +398,26 @@ public class WebDAVUploader extends AbstractUploader {
 		return false;
 	}
 
-	@SuppressWarnings("unused")
-	private XML propfind(final String path) {
-		String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>"
-				+ "<propfind xmlns=\"DAV:\">"
-				+ "<allprop />"
-				//+ "<prop><propname /></prop>"
-				+ "</propfind>";
-		try {
-			final HttpURLConnection connection = connect("PROPFIND", getURL(path, false), xml);
-			return new XML(connection.getInputStream());
-		} catch (Exception e) {
-			log.error(e);
-		}
-		return null;
-	}
-
 	private boolean directoryExists(final String path) throws UnauthenticatedException {
-		String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>"
-				+ "<propfind xmlns=\"DAV:\">"
-				+ "<prop>"
-				+ "<resourcetype/>"
-				+ "</prop>"
-				+ "</propfind>";
 		try {
-			final HttpURLConnection connection = connect("PROPFIND", getURL(path, true), xml);
+			PropFindMethod httpMethod = new PropFindMethod(getURL(path, false).toString(),
+					PropFindMethod.PROPFIND_PROPERTY_NAMES, new DavPropertyNameSet(), 0);
 
-			try {
-				final XML result = new XML(connection.getInputStream());
-				final NodeList list = result.xpath("/multistatus/response/propstat/prop/resourcetype/collection");
-				return list != null && list.getLength() > 0;
-			} catch (IOException e) {
-				if (connection.getResponseCode() == 401) throw new UnauthenticatedException();
-				throw e;
+			httpMethod.setRequestHeader("Timeout", "Second-600");
+			httpMethod.setRequestHeader("Brief", "t");
+			httpMethod.setRequestHeader("Content-Type", "text/xml; charset=\"utf-8\"");
+			runMethodOnClient(httpMethod);
+
+			int code = httpMethod.getStatusCode();
+			if(httpMethod.succeeded()) {
+				log.info("Successfully called PropFind on " + path + ".");
 			}
+			if (code == 401) throw new UnauthenticatedException();
+
+			return httpMethod.succeeded();
 		} catch (FileNotFoundException e) {
 			return false;
 		} catch (IOException e) {
-			log.error(e);
-		} catch (ParserConfigurationException e) {
-			log.error(e);
-		} catch (SAXException e) {
 			log.error(e);
 		}
 		return false;
@@ -406,9 +425,13 @@ public class WebDAVUploader extends AbstractUploader {
 
 	private boolean isAllowed() {
 		try {
-			final HttpURLConnection connection = connect("OPTIONS", new URL(baseURL), null);
-			connection.connect();
-			final String allow = connection.getHeaderField("Allow");
+			OptionsMethod httpMethod = new OptionsMethod(baseURL);
+//			httpMethod.setRequestHeader("Content-Type", "application/octet-stream");
+			runMethodOnClient(httpMethod);
+			if(httpMethod.succeeded()) {
+				log.info("Successfully retrieved OPTIONS.");
+			}
+			final String allow = httpMethod.getResponseHeader("Allow").getValue();
 			if (allow == null) {
 				log.error("Failed to retrieve OPTIONS for WebDAV actions");
 				return false;
@@ -427,9 +450,13 @@ public class WebDAVUploader extends AbstractUploader {
 
 	private boolean makeDirectory(final String path) {
 		try {
-			final HttpURLConnection connection = connect("MKCOL", getURL(path, true), null);
-			connection.connect();
-			return connection.getResponseCode() == 201;
+			MkColMethod httpMethod = new MkColMethod(getURL(path, true).toString());
+			httpMethod.setRequestHeader("Content-Type", "application/octet-stream");
+			runMethodOnClient(httpMethod);
+			if(httpMethod.succeeded()) {
+				log.info("Successfully made directory " + path + ".");
+			}
+			return httpMethod.succeeded();
 		} catch (Exception e) {
 			log.error(e);
 		}
@@ -450,83 +477,10 @@ public class WebDAVUploader extends AbstractUploader {
 			log.setLevel(LogService.DEBUG);
 			debug = true;
 		}
-	}
+		UsernamePasswordCredentials creds = new UsernamePasswordCredentials(username, password);
 
-	protected HttpURLConnection connect(final String method, final URL url, final String xml, final String... headers) throws IOException {
-		if (headers != null && (headers.length % 2) != 0) {
-			throw new IOException("Invalid list of header pairs");
-		}
-		final HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-		setRequestMethod(connection, method);
-
-		final String authentication = username + ":" + password;
-		connection.setRequestProperty("Authorization", "Basic " + Base64.encodeBytes(authentication.getBytes("UTF-8")));
-
-		if (headers != null) {
-			for (int i = 0; i < headers.length; i += 2) {
-				connection.setRequestProperty(headers[i], headers[i + 1]);
-			}
-		}
-
-		if (xml == null) {
-			connection.setRequestProperty("Content-Type", "application/octet-stream");
-		} else {
-			connection.addRequestProperty("Depth", "0");
-			connection.addRequestProperty("Brief", "t");
-			connection.addRequestProperty("Content-Type", "text/xml; charset=\"utf-8\"");
-			connection.setDoInput(true);
-			connection.setDoOutput(true);
-			connection.connect();
-
-			byte[] xmlBytes = xml.getBytes("UTF-8");
-			OutputStream out = getOutputStream(connection);
-			out.write(xmlBytes);
-			out.close();
-		}
-
-		if (debug) {
-			log.debug("Sent request " + connection.getRequestMethod() + " " + connection.getURL());
-			if (!"PUT".equals(connection.getRequestMethod())) {
-				log.debug("Response: " + connection.getResponseCode() + " " + connection.getResponseMessage());
-				Map<?, ?> map = connection.getHeaderFields();
-				for (Object key : map.keySet()) {
-					log.debug("Header: " + key + " = " + map.get(key));
-				}
-			}
-		}
-
-		return connection;
-	}
-
-	private OutputStream getOutputStream(HttpURLConnection connection) throws IOException {
-		try {
-			String savedMethod = getRequestMethod(connection);
-			setRequestMethod(connection, "PUT");
-			final OutputStream out;
-			try {
-				out = connection.getOutputStream();
-			} catch (IOException e) {
-				setRequestMethod(connection, savedMethod);
-				throw e;
-			}
-			setRequestMethod(connection, savedMethod);
-			return out;
-		} catch (IllegalArgumentException e) {
-			log.error(e);
-		}
-		return null;
-	}
-
-	private String getRequestMethod(final HttpURLConnection connection) {
-		return connection.getRequestMethod();
-	}
-
-	private void setRequestMethod(final HttpURLConnection connection, final String method) {
-		try {
-			connection.setRequestMethod(method);
-		} catch (ProtocolException e) {
-			e.printStackTrace();
-		}
+		client.getState().setCredentials(AuthScope.ANY, creds);
+		client.getParams().setAuthenticationPreemptive(true);
 	}
 
 }
