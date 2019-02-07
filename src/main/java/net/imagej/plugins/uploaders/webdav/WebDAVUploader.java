@@ -45,6 +45,8 @@ import org.xml.sax.SAXException;
 
 import javax.xml.parsers.ParserConfigurationException;
 import java.io.*;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.net.*;
 import java.util.*;
 
@@ -60,6 +62,31 @@ public class WebDAVUploader extends AbstractUploader {
 	private Set<String> existingDirectories;
 	private LogService log;
 	private boolean debug = false;
+
+	public WebDAVUploader() {
+		try {
+			Field methodsField = HttpURLConnection.class.getDeclaredField("methods");
+			methodsField.setAccessible(true);
+			// get the methods field modifiers
+			Field modifiersField = Field.class.getDeclaredField("modifiers");
+			// bypass the "private" modifier
+			modifiersField.setAccessible(true);
+
+			// remove the "final" modifier
+			modifiersField.setInt(methodsField, methodsField.getModifiers() & ~Modifier.FINAL);
+
+			/* valid HTTP methods */
+			String[] methods = {
+					"GET", "POST", "HEAD", "OPTIONS", "PUT", "DELETE", "TRACE", "PATCH",
+					"LOCK", "UNLOCK", "MOVE", "PROPFIND", "MKCOL"
+			};
+			// set the new methods - including patch
+			methodsField.set(null, methods);
+
+		} catch (SecurityException | IllegalArgumentException | IllegalAccessException | NoSuchFieldException e) {
+			e.printStackTrace();
+		}
+	}
 
 	@Override
 	public String getProtocol() {
@@ -489,8 +516,6 @@ public class WebDAVUploader extends AbstractUploader {
 		}
 		return null;
 	}
-
-	// -- reflected field made accessible
 
 	private String getRequestMethod(final HttpURLConnection connection) {
 		return connection.getRequestMethod();
