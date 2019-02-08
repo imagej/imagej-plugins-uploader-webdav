@@ -31,15 +31,14 @@
 
 package net.imagej.plugins.uploaders.webdav;
 
-import net.imagej.Sourced;
 import net.imagej.updater.AbstractUploaderTestBase;
 import org.apache.commons.httpclient.Header;
+import org.apache.commons.httpclient.methods.GetMethod;
 import org.apache.jackrabbit.webdav.client.methods.DeleteMethod;
 import org.junit.Test;
 
 import java.io.IOException;
 import java.net.URL;
-
 /**
  * A conditional JUnit test for uploading via WebDAV.
  * 
@@ -101,6 +100,19 @@ public class WebDAVUpdaterITCase extends AbstractUploaderTestBase {
 			}else {
 				System.out.println("Successfully deleted " + target + ".");
 			}
+		}
+
+		@Override
+		public boolean isDeleted(String path) throws IOException {
+			final URL target = new URL(url + path);
+			final boolean isDirectory = path.endsWith("/");
+			GetMethod httpMethod = new GetMethod(target.toString());
+			if(!isDirectory) {
+				httpMethod.setRequestHeader("Depth", "Infinity");
+			}
+			client.executeMethod(httpMethod);
+			int code = httpMethod.getStatusCode();
+			return code == 404;
 		}
 	}
 }
