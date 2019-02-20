@@ -84,13 +84,9 @@ public class WebDAVUpdaterITCase extends AbstractUploaderTestBase {
 			final URL target = new URL(url + path);
 			final boolean isDirectory = path.endsWith("/");
 			DeleteMethod httpMethod = new DeleteMethod(target.toString());
-			httpMethod.setRequestHeader("User-Agent", "Java");
+			httpMethod.setRequestHeader("User-Agent", "Java/" + System.getProperty("java.version"));
 			if(!isDirectory)
 				httpMethod.setRequestHeader("Depth", "Infinity");
-			System.out.println("Sending request " + httpMethod.getName() + " " + httpMethod.getURI());
-			for (Header header : httpMethod.getRequestHeaders()) {
-				System.out.println("Header: " + header.getName() + " = " + header.getValue());
-			}
 
 			client.executeMethod(httpMethod);
 

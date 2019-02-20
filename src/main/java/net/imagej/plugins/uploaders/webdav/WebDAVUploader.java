@@ -271,7 +271,7 @@ public class WebDAVUploader extends AbstractUploader {
 	}
 
 	private void runMethodOnClient(HttpMethod httpMethod) throws IOException {
-		httpMethod.setRequestHeader("User-Agent", "Java");
+		httpMethod.setRequestHeader("User-Agent", "Java/" + System.getProperty("java.version"));
 		if (debug) {
 			log.debug("Sending request " + httpMethod.getName() + " " + httpMethod.getURI());
 			for (Header header : httpMethod.getRequestHeaders()) {
@@ -299,7 +299,6 @@ public class WebDAVUploader extends AbstractUploader {
 
 			runMethodOnClient(httpMethod);
 
-			int statusCode = httpMethod.getStatusCode();
 			if (!httpMethod.succeeded()) System.err.println("Error obtaining lock for " + path + ": " + httpMethod.getStatusLine());
 			else {
 				log.info("Successfully locked " + path + ".");
@@ -355,8 +354,6 @@ public class WebDAVUploader extends AbstractUploader {
 			httpMethod.setRequestHeader("Content-Type", "application/octet-stream");
 			if(token != null)
 				httpMethod.setRequestHeader("If", "<" + url + "> (<" + token + ">)");
-
-			System.out.println("Token: " + "<" + url + "> (<" + token + ">)");
 
 			runMethodOnClient(httpMethod);
 
@@ -477,10 +474,8 @@ public class WebDAVUploader extends AbstractUploader {
 			log.setLevel(LogService.DEBUG);
 			debug = true;
 		}
-		UsernamePasswordCredentials creds = new UsernamePasswordCredentials(username, password);
 
-		client.getState().setCredentials(AuthScope.ANY, creds);
-		client.getParams().setAuthenticationPreemptive(true);
+		client.getState().setCredentials(AuthScope.ANY, new UsernamePasswordCredentials(username, password));
 	}
 
 }
