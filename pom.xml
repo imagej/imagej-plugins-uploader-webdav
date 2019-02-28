@@ -84,6 +84,8 @@ Institute of Molecular Cell Biology and Genetics.</license.copyrightOwners>
 
 		<!-- NB: Deploy releases to the ImageJ Maven repository. -->
 		<releaseProfiles>deploy-to-imagej</releaseProfiles>
+		<jackrabbit-webdav.version>2.12.10</jackrabbit-webdav.version>
+		<imagej-updater.version>0.10.0-SNAPSHOT</imagej-updater.version>
 	</properties>
 
 	<repositories>
@@ -98,7 +100,6 @@ Institute of Molecular Cell Biology and Genetics.</license.copyrightOwners>
 		<dependency>
 			<groupId>net.imagej</groupId>
 			<artifactId>imagej-updater</artifactId>
-			<version>0.10.0-SNAPSHOT</version>
 		</dependency>
 
 		<!-- SciJava dependencies -->
@@ -108,11 +109,10 @@ Institute of Molecular Cell Biology and Genetics.</license.copyrightOwners>
 		</dependency>
 
 		<!-- Third-party dependencies -->
-
 		<dependency>
 			<groupId>org.apache.jackrabbit</groupId>
 			<artifactId>jackrabbit-webdav</artifactId>
-			<version>3.0-SNAPSHOT</version>
+			<version>${jackrabbit-webdav.version}</version>
 		</dependency>
 
 		<dependency>
@@ -131,7 +131,6 @@ Institute of Molecular Cell Biology and Genetics.</license.copyrightOwners>
 			<artifactId>imagej-updater</artifactId>
 			<classifier>tests</classifier>
 			<scope>test</scope>
-			<version>0.10.0-SNAPSHOT</version>
 		</dependency>
 		<dependency>
 			<groupId>org.scijava</groupId>
