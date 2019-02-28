@@ -11,7 +11,7 @@
 
 	<groupId>net.imagej</groupId>
 	<artifactId>imagej-plugins-uploader-webdav</artifactId>
-	<version>0.2.3-SNAPSHOT</version>
+	<version>0.3.0-SNAPSHOT</version>
 
 	<name>ImageJ Plugins: Uploader: WebDAV</name>
 	<description>ImageJ Updater support for uploading via WebDAV.</description>
@@ -84,8 +84,10 @@ Institute of Molecular Cell Biology and Genetics.</license.copyrightOwners>
 
 		<!-- NB: Deploy releases to the ImageJ Maven repository. -->
 		<releaseProfiles>deploy-to-imagej</releaseProfiles>
+		<jackrabbit-webdav.version>2.12.10</jackrabbit-webdav.version>
 
-		<imagej-updater.version>0.9.4-SNAPSHOT</imagej-updater.version>
+		<!-- skip reproducible build enforcer during development -->
+		<imagej-updater.version>0.10.0-SNAPSHOT</imagej-updater.version>
 		<enforcer.skip>true</enforcer.skip>
 	</properties>
 
@@ -110,11 +112,10 @@ Institute of Molecular Cell Biology and Genetics.</license.copyrightOwners>
 		</dependency>
 
 		<!-- Third-party dependencies -->
-
 		<dependency>
 			<groupId>org.apache.jackrabbit</groupId>
 			<artifactId>jackrabbit-webdav</artifactId>
-			<version>3.0-SNAPSHOT</version>
+			<version>${jackrabbit-webdav.version}</version>
 		</dependency>
 
 		<dependency>
