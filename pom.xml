@@ -11,7 +11,7 @@
 
 	<groupId>net.imagej</groupId>
 	<artifactId>imagej-plugins-uploader-webdav</artifactId>
-	<version>0.2.3-SNAPSHOT</version>
+	<version>0.3.0-SNAPSHOT</version>
 
 	<name>ImageJ Plugins: Uploader: WebDAV</name>
 	<description>ImageJ Updater support for uploading via WebDAV.</description>
@@ -98,6 +98,7 @@ Institute of Molecular Cell Biology and Genetics.</license.copyrightOwners>
 		<dependency>
 			<groupId>net.imagej</groupId>
 			<artifactId>imagej-updater</artifactId>
+			<version>0.10.0-SNAPSHOT</version>
 		</dependency>
 
 		<!-- SciJava dependencies -->
@@ -130,6 +131,7 @@ Institute of Molecular Cell Biology and Genetics.</license.copyrightOwners>
 			<artifactId>imagej-updater</artifactId>
 			<classifier>tests</classifier>
 			<scope>test</scope>
+			<version>0.10.0-SNAPSHOT</version>
 		</dependency>
 		<dependency>
 			<groupId>org.scijava</groupId>
