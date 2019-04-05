@@ -50,6 +50,12 @@
 			<roles><role>founder</role></roles>
 			<properties><id>dscho</id></properties>
 		</contributor>
+		<contributor>
+			<name>Deborah Schmidt</name>
+			<url>http://imagej.net/User:Frauzufall</url>
+			<roles><role>maintainer</role></roles>
+			<properties><id>frauzufall</id></properties>
+		</contributor>
 	</contributors>
 
 	<mailingLists>
@@ -84,7 +90,9 @@ Institute of Molecular Cell Biology and Genetics.</license.copyrightOwners>
 
 		<!-- NB: Deploy releases to the ImageJ Maven repository. -->
 		<releaseProfiles>deploy-to-imagej</releaseProfiles>
-		<jackrabbit-webdav.version>2.12.10</jackrabbit-webdav.version>
+		<jackrabbit-webdav.version>2.19.1</jackrabbit-webdav.version>
+		<apache-httpclient.version>4.5.6</apache-httpclient.version>
+		<apache-httpcore.version>4.4.11</apache-httpcore.version>
 
 		<!-- skip reproducible build enforcer during development -->
 		<imagej-updater.version>0.10.0-SNAPSHOT</imagej-updater.version>
@@ -119,8 +127,14 @@ Institute of Molecular Cell Biology and Genetics.</license.copyrightOwners>
 		</dependency>
 
 		<dependency>
-			<groupId>commons-io</groupId>
-			<artifactId>commons-io</artifactId>
+			<groupId>org.apache.httpcomponents</groupId>
+			<artifactId>httpclient</artifactId>
+			<version>${apache-httpclient.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.httpcomponents</groupId>
+			<artifactId>httpcore</artifactId>
+			<version>${apache-httpcore.version}</version>
 		</dependency>
 
 		<!-- Test dependencies -->
@@ -132,12 +146,6 @@ Institute of Molecular Cell Biology and Genetics.</license.copyrightOwners>
 		<dependency>
 			<groupId>net.imagej</groupId>
 			<artifactId>imagej-updater</artifactId>
-			<classifier>tests</classifier>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.scijava</groupId>
-			<artifactId>scijava-common</artifactId>
 			<classifier>tests</classifier>
 			<scope>test</scope>
 		</dependency>

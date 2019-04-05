@@ -31,10 +31,19 @@
 
 package net.imagej.plugins.uploaders.webdav;
 
-import net.imagej.updater.AbstractUploaderTestBase;
+import net.imagej.updater.*;
+import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
-import java.io.IOException;
+import java.io.*;
+import java.util.ArrayList;
+import java.util.List;
+
+import static junit.framework.TestCase.assertTrue;
+import static org.junit.Assert.assertFalse;
+
 /**
  * A conditional JUnit test for uploading via WebDAV.
  * 
@@ -44,47 +53,90 @@ import java.io.IOException;
  * <dt>webdav.test.username</dt><dd>The name of the WebDAV account with write permission to the URL</dd>
  * <dt>webdav.test.password</dt><dd>The password of the WebDAV account with write permission to the URL</dd>
  * </dl>
- * 
+ *
  * Any files in the given directory will be deleted before running the test!
- * 
- * @author Johannes Schindelin
+ *
  * @author Deborah Schmidt
  */
-public class WebDAVUpdaterITCase extends AbstractUploaderTestBase {
-	public WebDAVUpdaterITCase() {
+public class WebDAVUploaderTests extends AbstractUploaderTestBase {
+
+	private WebDAVUploader uploader;
+	private String base;
+
+	public WebDAVUploaderTests() {
 		super("webdav");
+		uploader = new WebDAVUploader();
+	}
+
+	@Rule
+	public TemporaryFolder folder = new TemporaryFolder();
+
+	@Before
+	public void setupCredentials() {
+		final String username = getProperty("username");
+		final String password = getProperty("password");
+		base = getProperty("url");
+		uploader.setBaseUrl(base);
+		uploader.setCredentials(username, password);
+
 	}
 
 	@Test
-	public void testWebDAVUpload() throws Exception {
-		final String username = getProperty("username");
-		final String password = getProperty("password");
-
-		test(new WebDAVDeleter(username, password), "webdav:" + username + ":" + password, "");
+	public void createDirectory() throws Exception {
+		if(uploader.directoryExists("plugin")) {
+			uploader.delete("plugin/");
+		}
+		assertFalse(uploader.directoryExists("plugin"));
+		uploader.ensureDirectoryExists("plugin");
+		assertTrue(uploader.directoryExists("plugin"));
 	}
 
-	private class WebDAVDeleter extends WebDAVUploader implements AbstractUploaderTestBase.Deleter {
-		public WebDAVDeleter(final String username, final String password) {
-			setCredentials(username, password);
-			setBaseUrl(WebDAVUpdaterITCase.this.getURL());
-		}
+	@Test
+	public void uploadFile() throws Exception {
+		File file = createTestFile();
+		uploader.upload(new UploadableFile(file, file.getName()), null, null);
+	}
 
-		@Override
-		public boolean login() {
-			return true; // we did that already in the constructor
-		}
+	@Test
+	public void testLogin() {
+		assertTrue(login());
+	}
 
-		@Override
-		public void logout() { }
+	private boolean login() {
+		FilesCollection files = new FilesCollection(folder.getRoot());
+		files.addUpdateSite("test", base, "webdav:" + getProperty("username"), null, 0);
+		FilesUploader fUploader = new FilesUploader(files, "test");
+		return uploader.login(fUploader);
+	}
 
-		@Override
-		public void delete(final String path) throws IOException {
-			super.delete(path);
+	@Test
+	public void testDirectoryExists() throws IOException, WebDAVUploader.UnauthenticatedException {
+		assertTrue(uploader.directoryExists(""));
+	}
+	@Test
+	public void uploadLargeFiles() throws Exception {
+		login();
+		File file = createTestFile();
+		RandomAccessFile raf = new RandomAccessFile(file, "rw");
+		try {
+			raf.setLength(200*1000*1000);
 		}
+		finally {
+			raf.close();
+		}
+		List<Uploadable> toBeUploaded = new ArrayList<>();
+		toBeUploaded.add(new UploadableFile(file, file.getName()));
+		toBeUploaded.add(new UploadableFile(file, file.getName()+"2"));
 
-		@Override
-		public boolean isDeleted(String path) throws IOException {
-			return super.isDeleted(path);
-		}
+		uploader.upload(toBeUploaded, new ArrayList<>());
+	}
+
+	private File createTestFile() throws IOException {
+		File file = folder.newFile("testfile.txt");
+		PrintWriter writer = new PrintWriter(file, "UTF-8");
+		writer.println("The first line");
+		writer.println("The second line");
+		writer.close();
+		return file;
 	}
 }

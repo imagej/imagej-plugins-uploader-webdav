@@ -35,23 +35,34 @@ import net.imagej.plugins.uploaders.webdav.NetrcParser.Credentials;
 import net.imagej.updater.*;
 import net.imagej.updater.util.UpdaterUserInterface;
 import net.imagej.updater.util.UpdaterUtil;
-import org.apache.commons.httpclient.*;
-import org.apache.commons.httpclient.auth.AuthScope;
-import org.apache.commons.httpclient.methods.InputStreamRequestEntity;
-import org.apache.commons.httpclient.methods.RequestEntity;
-import org.apache.commons.httpclient.util.DateUtil;
-import org.apache.commons.io.input.CountingInputStream;
+import org.apache.http.Header;
+import org.apache.http.HttpResponse;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.CredentialsProvider;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.config.AuthSchemes;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPut;
+import org.apache.http.client.methods.HttpUriRequest;
+import org.apache.http.client.protocol.HttpClientContext;
+import org.apache.http.client.utils.DateUtils;
+import org.apache.http.entity.InputStreamEntity;
+import org.apache.http.impl.client.BasicCredentialsProvider;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.protocol.HttpContext;
+import org.apache.jackrabbit.webdav.DavConstants;
 import org.apache.jackrabbit.webdav.client.methods.*;
+import org.apache.jackrabbit.webdav.lock.LockInfo;
 import org.apache.jackrabbit.webdav.lock.Scope;
 import org.apache.jackrabbit.webdav.lock.Type;
-import org.apache.jackrabbit.webdav.property.DavPropertyNameSet;
+import org.scijava.log.LogLevel;
 import org.scijava.log.LogService;
 import org.scijava.log.StderrLogService;
 import org.scijava.plugin.Plugin;
 
-import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -62,18 +73,37 @@ import java.util.*;
  * Uploads files to an update server using WebDAV.
  * 
  * @author Johannes Schindelin
+ * @author Deborah Schmidt
  */
 @Plugin(type = Uploader.class)
 public class WebDAVUploader extends AbstractUploader {
 
 	private String baseURL,username, password;
-	private Set<String> existingDirectories;
+	private final Set<String> existingDirectories;
 	private LogService log;
 	private boolean debug = true;
-	protected HttpClient client;
+	protected static HttpClient client;
+	private CredentialsProvider provider;
+	ArrayList<String> schemes = new ArrayList<>();
+
+	static class UnauthenticatedException extends Exception {}
 
 	public WebDAVUploader() {
-		client = new HttpClient();
+		provider = new BasicCredentialsProvider();
+		int timeout = 5;
+		schemes.add(AuthSchemes.DIGEST);
+		schemes.add(AuthSchemes.BASIC);
+		RequestConfig config = RequestConfig.custom()
+				.setConnectTimeout(timeout * 1000)
+				.setConnectionRequestTimeout(timeout * 1000)
+//				.setSocketTimeout(timeout * 1000)
+				.build();
+		client = HttpClientBuilder.create()
+				.setDefaultCredentialsProvider(provider)
+				.setDefaultRequestConfig(config)
+				.build();
+
+		existingDirectories = new HashSet<>();
 	}
 
 	@Override
@@ -89,6 +119,7 @@ public class WebDAVUploader extends AbstractUploader {
 		debug = log.isDebug();
 
 		String host = uploader.getUploadHost();
+
 		if (!"".equals(host)) {
 			username = host;
 			int colon = username.indexOf(':');
@@ -101,7 +132,7 @@ public class WebDAVUploader extends AbstractUploader {
 		}
 
 		UpdateSite site = uploader.getFilesCollection().getUpdateSite(uploader.getSiteName(), true);
-		baseURL = site.getURL();
+		setBaseUrl(site.getURL());
 
 		if (username == null || password == null) {
 			int colon = baseURL.indexOf("://");
@@ -131,29 +162,26 @@ public class WebDAVUploader extends AbstractUploader {
 			if (password == null) return false;
 		}
 
-		if (!baseURL.endsWith("/")) baseURL += "/";
-
-		existingDirectories = new HashSet<>();
-
 		setCredentials(username, password);
 
-		if (!isAllowed()) {
-			UpdaterUserInterface.get().error("User " + username + " lacks upload permissions for " + baseURL);
-			return false;
-		}
 		try {
+			if (!isAllowed()) {
+				UpdaterUserInterface.get().error("User " + username + " lacks upload permissions for " + baseURL + " or the password is incorrect.");
+				return false;
+			}
 			if (!directoryExists("")) {
 				UpdaterUserInterface.get().error(baseURL + " does not exist yet!");
 				return false;
 			}
-		} catch (UnauthenticatedException e) {
-			return false;
+		}
+		catch (UnauthenticatedException e) {
+			UpdaterUserInterface.get().error("User " + username + " lacks upload permissions for " + baseURL + " or the password is incorrect.");
+			e.printStackTrace();
+		}
+		catch (IOException e) {
+			e.printStackTrace();
 		}
 		return true;
-	}
-
-	private static class UnauthenticatedException extends Exception {
-		private static final long serialVersionUID = 8269335582341674291L;
 	}
 
 	@Override
@@ -164,23 +192,22 @@ public class WebDAVUploader extends AbstractUploader {
 	// Steps to accomplish entire upload task
 	@Override
 	public synchronized void upload(final List<Uploadable> sources,
-		final List<String> locks) throws IOException
-	{
+		final List<String> locks) throws IOException {
 		timestamp = -1;
-		Map<String, String> tokens = new HashMap<String, String>();
+		Map<String, String> tokens = new HashMap<>();
 		for (final String lock : locks) {
 			final String path = lock + ".lock";
 			final String token = lock(path);
 			tokens.put(path, token);
 		}
 		setTitle("Uploading");
-
+		calculateTotalSize(sources);
+		int count = 0;
 		try {
-			calculateTotalSize(sources);
-			int count = 0;
-			final byte[] buf = new byte[16384];
 			for (final Uploadable source : sources) {
+
 				final String target = source.getFilename();
+				String token = tokens.get(target);
 
 				// make sure that the target directory exists
 				int slash = target.lastIndexOf('/');
@@ -189,57 +216,20 @@ public class WebDAVUploader extends AbstractUploader {
 				}
 
 				addItem(source);
-				final InputStream input = source.getInputStream();
-				int currentCount = 0;
+				final int[] currentCount = {0};
 				final int currentTotal = (int) source.getFilesize();
-				String token = tokens.get(target);
-				URL url = getURL(target, false);
+				int finalCount = count;
 
-				PutMethod httpMethod = new PutMethod(url.toString());
-				if(token != null) {
-					httpMethod.setRequestHeader("If", "<" + url + "> (<" + token + ">)");
-				}
-				httpMethod.setRequestHeader("Content-Length", "" + source.getFilesize());
+				ProgressHttpEntityWrapper.ProgressCallback progressCallback = progress -> {
+					currentCount[0] = (int) (currentTotal * progress);
+					setItemCount(currentCount[0], currentTotal);
+					setCount(finalCount + currentCount[0], total);
+				};
 
-				CountingInputStream cis = new CountingInputStream(input);
+				upload(source, token, progressCallback);
 
-				RequestEntity requestEntity = new InputStreamRequestEntity(cis);
-				httpMethod.setRequestEntity(requestEntity);
-
-				Thread thread = new Thread(() -> {
-					try {
-						runMethodOnClient(httpMethod);
-					} catch (HttpException e) {
-						System.err.println("Fatal protocol violation: " + e.getMessage());
-						e.printStackTrace();
-					} catch (IOException e) {
-						System.err.println("Fatal transport error: " + e.getMessage());
-						e.printStackTrace();
-					} finally {
-						httpMethod.releaseConnection();
-					}
-
-				});
-
-				thread.start();
-
-				for (;;) {
-					if (!thread.isAlive()) break;
-					currentCount = (int)cis.getByteCount();
-					setItemCount(currentCount, currentTotal);
-					setCount(count + currentCount, total);
-				}
-				count += currentCount;
-				cis.close();
 				itemDone(source);
-				int code = httpMethod.getStatusCode();
-				if (!httpMethod.succeeded()) {
-					log.error("Code: " + code + " " + httpMethod.getStatusLine());
-					throw new IOException("Could not write " + target);
-				} else {
-					log.info("Upload of " + target + " successful.");
-				}
-
+				count += currentCount[0];
 			}
 			done();
 
@@ -258,8 +248,6 @@ public class WebDAVUploader extends AbstractUploader {
 					log.error("Could not move " + source + " to " + lock);
 				}
 			}
-		} catch (Exception e) {
-			log.error(e);
 		} finally {
 			for (final String key : tokens.keySet()) {
 				final String token = tokens.get(key);
@@ -270,212 +258,292 @@ public class WebDAVUploader extends AbstractUploader {
 		}
 	}
 
-	private void runMethodOnClient(HttpMethod httpMethod) throws IOException {
-		httpMethod.setRequestHeader("User-Agent", "Java/" + System.getProperty("java.version"));
-		if (debug) {
-			log.debug("Sending request " + httpMethod.getName() + " " + httpMethod.getURI());
-			for (Header header : httpMethod.getRequestHeaders()) {
-				log.debug("Header: " + header.getName() + " = " + header.getValue());
-			}
-		}
-		client.executeMethod(httpMethod);
-		if (debug) {
-			log.debug("Response: " + httpMethod.getStatusCode() + " " + httpMethod.getStatusLine());
-			for (Header header : httpMethod.getResponseHeaders()) {
-				log.debug("Header: " + header.getName() + " = " + header.getValue());
-			}
-		}
-	}
+	boolean upload(Uploadable source, String token, ProgressHttpEntityWrapper.ProgressCallback progressCallback) throws IOException {
 
-	private String lock(final String path) throws IOException {
+		String target = source.getFilename();
+		URL url = getURL(target, false);
+		HttpPut method = new HttpPut(url.toString());
+		if(token != null) {
+			method.setHeader("If", "<" + url + "> (<" + token + ">)");
+		}
+
+		InputStreamEntity entity = new InputStreamEntity(source.getInputStream(), source.getFilesize());
+
+		if(progressCallback != null) {
+			method.setEntity(new ProgressHttpEntityWrapper(entity, progressCallback, source.getFilesize()));
+		} else {
+			method.setEntity(entity);
+		}
+
 		try {
-
-			LockMethod httpMethod = new LockMethod(getURL(path, false).toString(),
-					Scope.EXCLUSIVE, Type.WRITE, username, (long)(600*60), false);
-			//TODO test if one can remove these headers
-			httpMethod.setRequestHeader("Timeout", "Second-600");
-			httpMethod.setRequestHeader("Brief", "t");
-			httpMethod.setRequestHeader("Content-Type", "text/xml; charset=\"utf-8\"");
-
-			runMethodOnClient(httpMethod);
-
-			if (!httpMethod.succeeded()) System.err.println("Error obtaining lock for " + path + ": " + httpMethod.getStatusLine());
-			else {
-				log.info("Successfully locked " + path + ".");
-			}
-			if (timestamp < 0) {
-				Date date = DateUtil.parseDate(httpMethod.getResponseHeader("Date").getValue());
-				Calendar cal = Calendar.getInstance();
-				cal.setTime(date);
-				timestamp = Long.parseLong(UpdaterUtil.timestamp(cal));
-				if (timestamp < 0) {
-					throw new IOException("Could not obtain date from the server");
-				}
-			}
-
-			final String token = httpMethod.getLockToken();
-			if (debug) {
-				log.info("Tried to obtain a lock (" + token + "):\n" + httpMethod.getResponseBodyAsString());
-			}
-			if (token == null) {
-				log.error("Expected lock for '" + path + "', got:\n" + httpMethod.getResponseBodyAsString());
-				throw new IOException("Could not obtain lock for " + path);
-			}
-			return token;
-		} catch (IOException e) {
-			throw e;
-		} catch (Exception e) {
-			log.error(e);
-			throw new RuntimeException(e);
-		}
-	}
-
-	private boolean unlock(final String path, final String token) {
-		try {
-			UnLockMethod httpMethod = new UnLockMethod(getURL(path, false).toString(), token);
-			httpMethod.setRequestHeader("Content-Type", "application/octet-stream");
-			client.executeMethod(httpMethod);
-
-			if (!httpMethod.succeeded()) System.err.println("Error removing lock from " + path + ": " + httpMethod.getStatusLine());
-			else {
-				log.info("Successfully unlocked " + path + ".");
-			}
-		} catch (Exception e) {
-			log.error(e);
-		}
-		return false;
-	}
-
-	private boolean move(final String source, final String target, final String token, boolean force) {
-		try {
-			final String url = getURL(source, false).toString();
-			final String targetURL = getURL(target, false).toString();
-			MoveMethod httpMethod = new MoveMethod(url, targetURL, force);
-			httpMethod.setRequestHeader("Content-Type", "application/octet-stream");
-			if(token != null)
-				httpMethod.setRequestHeader("If", "<" + url + "> (<" + token + ">)");
-
-			runMethodOnClient(httpMethod);
-
-			if (httpMethod.succeeded()) {
-				log.info("Successfully moved  " + source + " to " + target + ".");
+			HttpResponse response = runMethodOnClient(method, createStreamingUploadContext());
+			int code = response.getStatusLine().getStatusCode();
+			if (code != 201 && code != 204) {
+				log.error("Code: " + code + " " + response.getStatusLine());
+				throw new IOException("Could not write " + target);
+			} else {
+				log.info("Successfully uploaded to " + target + "");
 				return true;
 			}
-			log.error("Error moving " + source + " to " + target + ": " + httpMethod.getStatusLine());
-		} catch (Exception e) {
-			log.error(e);
+		} finally {
+			method.releaseConnection();
 		}
-		return false;
 	}
 
-	private boolean ensureDirectoryExists(final String path) {
+	private HttpClientContext createStreamingUploadContext() {
+		final HttpClientContext context = createContext();
+		RequestConfig config = RequestConfig.custom().setExpectContinueEnabled(true).build();
+		context.setRequestConfig(config);
+		return context;
+	}
+
+	String lock(final String path) throws IOException {
+		HttpLock method = new HttpLock(getURL(path, false).toString(),
+				new LockInfo(Scope.EXCLUSIVE, Type.WRITE, username, 600*1000, false));
+		boolean success;
+		HttpResponse response;
+		try {
+			response = runMethodOnClient(method);
+			success = method.succeeded(response);
+		} finally {
+			method.releaseConnection();
+		}
+
+		if (!success) System.err.println("Error obtaining lock for " + path + ": " + response.getStatusLine());
+		else {
+			log.info("Successfully locked " + path + ".");
+		}
+		if (timestamp < 0) {
+			Date date = DateUtils.parseDate(response.getFirstHeader("Date").getValue());
+			Calendar cal = Calendar.getInstance();
+			cal.setTime(date);
+			timestamp = Long.parseLong(UpdaterUtil.timestamp(cal));
+			if (timestamp < 0) {
+				throw new IOException("Could not obtain date from the server");
+			}
+		}
+
+		final String token = method.getLockToken(response);
+		if (debug) {
+			log.info("Tried to obtain a lock (" + token + "):\n" + response.getEntity().getContent().toString());
+		}
+		if (token == null) {
+			log.error("Expected lock for '" + path + "', got:\n" + response.getEntity().getContent().toString());
+			throw new IOException("Could not obtain lock for " + path);
+		}
+		return token;
+	}
+
+	boolean unlock(final String path, final String token) throws IOException {
+		HttpUnlock method = new HttpUnlock(getURL(path, false).toString(), token);
+		boolean success;
+		try {
+			HttpResponse response = runMethodOnClient(method);
+			if (success = method.succeeded(response)) {
+				log.info("Successfully unlocked " + path + ".");
+			}
+			else {
+				System.err.println("Error removing lock from " + path + ": " + response.getStatusLine());
+			}
+		} finally {
+			method.releaseConnection();
+		}
+		return success;
+	}
+
+	boolean move(final String source, final String target, final String token, boolean force) throws IOException {
+		final String url = getURL(source, false).toString();
+		final String targetURL = getURL(target, false).toString();
+		HttpMove method = new HttpMove(url, targetURL, force);
+		if(token != null)
+			method.setHeader("If", "<" + url + "> (<" + token + ">)");
+		boolean success = false;
+		try {
+			HttpResponse response = runMethodOnClient(method);
+			success = method.succeeded(response);
+			if (success) {
+				log.info("Successfully moved  " + source + " to " + target + ".");
+			} else {
+				log.error("Error moving " + source + " to " + target + ": " + response.getStatusLine());
+			}
+		} catch (Exception e) {
+			log.error(e);
+		} finally {
+			method.releaseConnection();
+		}
+		return success;
+	}
+
+	boolean ensureDirectoryExists(final String path) throws IOException {
 		if (existingDirectories.contains(path)) {
 			return true;
 		}
-
 		try {
 			if (directoryExists(path)) {
 				existingDirectories.add(path);
 				return true;
 			}
 		} catch (UnauthenticatedException e) {
-			return false;
+			log.error("Could not check if directory " + path + " exists. The given user is unauthorized or the given password is incorrect.");
 		}
-
 		int slash = path.lastIndexOf('/', path.length() - 2);
 		if (slash > 0 && !ensureDirectoryExists(path.substring(0, slash + 1))) {
 			return false;
 		}
-
 		if (makeDirectory(path)) {
 			existingDirectories.add(path);
 			return true;
 		}
-
 		return false;
 	}
 
-	private boolean directoryExists(final String path) throws UnauthenticatedException {
+	boolean directoryExists(final String path) throws IOException, UnauthenticatedException {
+		HttpPropfind method = new HttpPropfind(getURL(path, true).toString(),
+				DavConstants.PROPFIND_ALL_PROP, 0);
 		try {
-			PropFindMethod httpMethod = new PropFindMethod(getURL(path, false).toString(),
-					PropFindMethod.PROPFIND_PROPERTY_NAMES, new DavPropertyNameSet(), 0);
-
-			httpMethod.setRequestHeader("Timeout", "Second-600");
-			httpMethod.setRequestHeader("Brief", "t");
-			httpMethod.setRequestHeader("Content-Type", "text/xml; charset=\"utf-8\"");
-			runMethodOnClient(httpMethod);
-
-			int code = httpMethod.getStatusCode();
-			if(httpMethod.succeeded()) {
-				log.info("Successfully called PropFind on " + path + ".");
+			HttpResponse response = runMethodOnClient(method);
+			if(response.getStatusLine().getStatusCode() == 401) {
+				log.error("Could not check if directory " + path + " exists. The given user is unauthorized or the given password is incorrect.");
+				throw new UnauthenticatedException();
 			}
-			if (code == 401) throw new UnauthenticatedException();
-
-			return httpMethod.succeeded();
-		} catch (FileNotFoundException e) {
-			return false;
-		} catch (IOException e) {
-			log.error(e);
+			boolean success = method.succeeded(response);
+			if(success) {
+				log.info("Successfully called PropFind, directory exists: " + path + ".");
+				return true;
+			}
+		} finally {
+			method.releaseConnection();
 		}
 		return false;
 	}
 
-	private boolean isAllowed() {
+	boolean isAllowed() throws IOException {
+		HttpOptions method = new HttpOptions(baseURL);
+		boolean success;
 		try {
-			OptionsMethod httpMethod = new OptionsMethod(baseURL);
-//			httpMethod.setRequestHeader("Content-Type", "application/octet-stream");
-			runMethodOnClient(httpMethod);
-			if(httpMethod.succeeded()) {
+			HttpResponse response = runMethodOnClient(method);
+			Header header = response.getFirstHeader("Allow");
+			if (header == null) {
+				success = false;
+//				log.error("Failed to retrieve OPTIONS for WebDAV actions");
+			} else {
+				success = true;
 				log.info("Successfully retrieved OPTIONS.");
+				final String allow = header.getValue();
+				if (!allow.contains("LOCK")) {
+					log.error("LOCK action not allowed; valid actions: " + allow);
+					success = false;
+				}
 			}
-			final String allow = httpMethod.getResponseHeader("Allow").getValue();
-			if (allow == null) {
-				log.error("Failed to retrieve OPTIONS for WebDAV actions");
-				return false;
-			}
-			if (!allow.contains("LOCK")) {
-				log.error("LOCK action not allowed; valid actions: " + allow);
-				return false;
-			}
-			return true;
+		} finally {
+			method.releaseConnection();
 		}
-		catch (final Exception e) {
-			log.error(e);
-		}
-		return false;
+		return success;
 	}
 
-	private boolean makeDirectory(final String path) {
+	boolean makeDirectory(final String path) throws IOException {
+		HttpMkcol method = new HttpMkcol(getURL(path, true).toString());
+		boolean success;
 		try {
-			MkColMethod httpMethod = new MkColMethod(getURL(path, true).toString());
-			httpMethod.setRequestHeader("Content-Type", "application/octet-stream");
-			runMethodOnClient(httpMethod);
-			if(httpMethod.succeeded()) {
-				log.info("Successfully made directory " + path + ".");
-			}
-			return httpMethod.succeeded();
-		} catch (Exception e) {
-			log.error(e);
+			HttpResponse response = runMethodOnClient(method);
+			success = method.succeeded(response);
+		} finally {
+			method.releaseConnection();
 		}
-		return false;
+		if(success) {
+			log.info("Successfully made directory " + path + ".");
+			return true;
+		} else {
+			log.error("Failed to make directory " + path + ".");
+			return false;
+		}
+	}
+
+	void delete(final String path) throws IOException {
+		final boolean isDirectory = path.endsWith("/");
+		final URL target = getURL(path, isDirectory);
+		HttpDelete method = new HttpDelete(target.toString());
+		if(!isDirectory)
+			method.setHeader("Depth", "Infinity");
+		try {
+			HttpResponse response = runMethodOnClient(method);
+			if (method.succeeded(response)) {
+				log.info("Successfully deleted " + target + ".");
+			}else {
+				throw new IOException("Could not delete " + target + ": " + response.getStatusLine());
+			}
+		} finally {
+			method.releaseConnection();
+		}
+	}
+
+	boolean isDeleted(String path) throws IOException {
+		final boolean isDirectory = path.endsWith("/");
+		final URL target = getURL(path, isDirectory);
+		HttpGet method = new HttpGet(target.toString());
+		if(!isDirectory) {
+			method.setHeader("Depth", "Infinity");
+		}
+		boolean success;
+		try {
+			HttpResponse response = runMethodOnClient(method);
+			success = response.getStatusLine().getStatusCode() == 404;
+		} finally {
+			method.releaseConnection();
+		}
+		return success;
+	}
+
+	private HttpClientContext createContext() {
+		final HttpClientContext context = HttpClientContext.create();
+		context.setCredentialsProvider(provider);
+		RequestConfig config = RequestConfig.custom().setExpectContinueEnabled(true).build();
+		context.setRequestConfig(config);
+		return context;
+	}
+
+	HttpResponse runMethodOnClient(HttpUriRequest method) throws IOException {
+		return runMethodOnClient(method, createContext());
+	}
+
+	HttpResponse runMethodOnClient(HttpUriRequest method, HttpContext context) throws IOException {
+		method.setHeader("User-Agent", "Java/" + System.getProperty("java.version"));
+		if (debug) {
+			log.debug("Sending request " + method);
+			for (Header header : method.getAllHeaders()) {
+				log.debug("Header: " + header.getName() + " = " + header.getValue());
+			}
+		}
+		HttpResponse response = client.execute(method, context);
+		if (debug) {
+			log.debug("Response: " + response.getStatusLine().getStatusCode() + " " + response.getStatusLine());
+			for (Header header : response.getAllHeaders()) {
+				log.debug("Header: " + header.getName() + " = " + header.getValue());
+			}
+		}
+		return response;
 	}
 
 	private URL getURL(final String path, boolean isDirectory) throws MalformedURLException, UnsupportedEncodingException {
 		final String url = baseURL + URLEncoder.encode(path, "UTF-8").replaceAll("%2F", "/").replaceAll("\\+","%20");
-		if (!isDirectory || "".equals(path) && path.endsWith("/")) return new URL(url);
+		if (!isDirectory || "".equals(path) || path.endsWith("/")) return new URL(url);
 		return new URL(url + "/");
 	}
 
-	protected void setCredentials(final String username, final String password) {
+	void setCredentials(final String username, final String password) {
 		this.username = username;
 		this.password = password;
 		if (log == null) {
 			log = new StderrLogService();
-			log.setLevel(LogService.DEBUG);
+			log.setLevel(LogLevel.DEBUG);
 			debug = true;
 		}
+		provider.setCredentials(AuthScope.ANY, new UsernamePasswordCredentials(username, password));
+	}
 
-		client.getState().setCredentials(AuthScope.ANY, new UsernamePasswordCredentials(username, password));
+	void setBaseUrl(String url) {
+		baseURL = url;
+		if (!baseURL.endsWith("/")) baseURL += "/";
 	}
 
 }
