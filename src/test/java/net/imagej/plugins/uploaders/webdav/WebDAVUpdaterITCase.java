@@ -35,11 +35,9 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
-import net.imagej.plugins.uploaders.webdav.WebDAVUploader;
 import net.imagej.updater.AbstractUploaderTestBase;
 
 import org.junit.Test;
-
 /**
  * A conditional JUnit test for uploading via WebDAV.
  * 
@@ -91,6 +89,17 @@ public class WebDAVUpdaterITCase extends AbstractUploaderTestBase {
 			if (code > 299) {
 				throw new IOException("Could not delete " + url + ": " + code + " " + connection.getResponseMessage());
 			}
+		}
+
+		@Override
+		public boolean isDeleted(String path) throws IOException {
+			final URL target = new URL(url + path);
+			final boolean isDirectory = path.endsWith("/");
+			final HttpURLConnection connection = isDirectory ?
+					connect("GET", target, null) :
+					connect("GET", target, null, "Depth", "Infinity");
+			int code = connection.getResponseCode();
+			return code == 404;
 		}
 	}
 }
