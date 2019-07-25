@@ -42,6 +42,18 @@
 				<role>maintainer</role>
 			</roles>
 		</developer>
+		<developer>
+			<name>Deborah Schmidt</name>
+			<url>http://imagej.net/User:Frauzufall</url>
+			<roles>
+				<role>developer</role>
+				<role>debugger</role>
+				<role>reviewer</role>
+				<role>support</role>
+				<role>maintainer</role>
+			</roles>
+			<properties><id>frauzufall</id></properties>
+		</developer>
 	</developers>
 	<contributors>
 		<contributor>
