@@ -31,28 +31,24 @@
 
 package net.imagej.plugins.uploaders.webdav;
 
-import java.io.IOException;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
-import net.imagej.plugins.uploaders.webdav.WebDAVUploader;
 import net.imagej.updater.AbstractUploaderTestBase;
-
 import org.junit.Test;
 
+import java.io.IOException;
 /**
  * A conditional JUnit test for uploading via WebDAV.
  * 
- * This test is only activated iff the following system properties are set:
+ * <p>This test is only activated iff the following system properties are set:
  * <dl>
  * <dt>webdav.test.url</dt><dd>The URL of the update site</dd>
  * <dt>webdav.test.username</dt><dd>The name of the WebDAV account with write permission to the URL</dd>
  * <dt>webdav.test.password</dt><dd>The password of the WebDAV account with write permission to the URL</dd>
- * </dl>
+ * </dl></p>
  * 
- * Any files in the given directory will be deleted before running the test!
+ * <p>Any files in the given directory will be deleted before running the test!</p>
  * 
  * @author Johannes Schindelin
+ * @author Deborah Schmidt
  */
 public class WebDAVUpdaterITCase extends AbstractUploaderTestBase {
 	public WebDAVUpdaterITCase() {
@@ -70,6 +66,7 @@ public class WebDAVUpdaterITCase extends AbstractUploaderTestBase {
 	private class WebDAVDeleter extends WebDAVUploader implements AbstractUploaderTestBase.Deleter {
 		public WebDAVDeleter(final String username, final String password) {
 			setCredentials(username, password);
+			setBaseUrl(WebDAVUpdaterITCase.this.getURL());
 		}
 
 		@Override
@@ -82,15 +79,12 @@ public class WebDAVUpdaterITCase extends AbstractUploaderTestBase {
 
 		@Override
 		public void delete(final String path) throws IOException {
-			final URL target = new URL(url + path);
-			final boolean isDirectory = path.endsWith("/");
-			final HttpURLConnection connection = isDirectory ?
-					connect("DELETE", target, null) :
-					connect("DELETE", target, null, "Depth", "Infinity");
-			int code = connection.getResponseCode();
-			if (code > 299) {
-				throw new IOException("Could not delete " + url + ": " + code + " " + connection.getResponseMessage());
-			}
+			super.delete(path);
+		}
+
+		@Override
+		public boolean isDeleted(String path) throws IOException {
+			return super.isDeleted(path);
 		}
 	}
 }

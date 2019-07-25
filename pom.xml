@@ -84,6 +84,11 @@ Institute of Molecular Cell Biology and Genetics.</license.copyrightOwners>
 
 		<!-- NB: Deploy releases to the SciJava Maven repository. -->
 		<releaseProfiles>deploy-to-scijava</releaseProfiles>
+
+		<jackrabbit-webdav.version>2.19.1</jackrabbit-webdav.version>
+		<apache-httpclient.version>4.5.6</apache-httpclient.version>
+		<apache-httpcore.version>4.4.11</apache-httpcore.version>
+		<imagej-updater.version>0.10.1</imagej-updater.version>
 	</properties>
 
 	<repositories>
@@ -108,9 +113,26 @@ Institute of Molecular Cell Biology and Genetics.</license.copyrightOwners>
 
 		<!-- Third-party dependencies -->
 		<dependency>
-			<groupId>net.iharder</groupId>
-			<artifactId>base64</artifactId>
-			<version>2.3.8</version>
+			<groupId>org.apache.jackrabbit</groupId>
+			<artifactId>jackrabbit-webdav</artifactId>
+			<version>${jackrabbit-webdav.version}</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.apache.httpcomponents</groupId>
+			<artifactId>httpclient</artifactId>
+			<version>${apache-httpclient.version}</version>
+			<exclusions>
+				<exclusion>
+					<groupId>commons-logging</groupId>
+					<artifactId>commons-logging</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.httpcomponents</groupId>
+			<artifactId>httpcore</artifactId>
+			<version>${apache-httpcore.version}</version>
 		</dependency>
 
 		<!-- Test dependencies -->
@@ -122,12 +144,6 @@ Institute of Molecular Cell Biology and Genetics.</license.copyrightOwners>
 		<dependency>
 			<groupId>net.imagej</groupId>
 			<artifactId>imagej-updater</artifactId>
-			<classifier>tests</classifier>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.scijava</groupId>
-			<artifactId>scijava-common</artifactId>
 			<classifier>tests</classifier>
 			<scope>test</scope>
 		</dependency>
