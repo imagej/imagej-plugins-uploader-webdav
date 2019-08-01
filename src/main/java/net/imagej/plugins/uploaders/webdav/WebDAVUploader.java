@@ -92,13 +92,13 @@ public class WebDAVUploader extends AbstractUploader {
 
 	public WebDAVUploader() {
 		provider = new BasicCredentialsProvider();
-		int timeout = 5;
+		int timeout = 360;
 		schemes.add(AuthSchemes.DIGEST);
 		schemes.add(AuthSchemes.BASIC);
 		RequestConfig config = RequestConfig.custom()
 				.setConnectTimeout(timeout * 1000)
 				.setConnectionRequestTimeout(timeout * 1000)
-//				.setSocketTimeout(timeout * 1000)
+				.setSocketTimeout(timeout * 1000)
 				.build();
 		client = HttpClientBuilder.create()
 				.setDefaultCredentialsProvider(provider)
