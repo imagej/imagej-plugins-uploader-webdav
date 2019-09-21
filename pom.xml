@@ -30,12 +30,12 @@
 
 	<developers>
 		<developer>
-			<id>ctrueden</id>
-			<name>Curtis Rueden</name>
-			<url>https://imagej.net/User:Rueden</url>
+			<id>frauzufall</id>
+			<name>Deborah Schmidt</name>
+			<url>https://imagej.net/User:Frauzufall</url>
 			<roles>
-				<role>founder</role>
 				<role>lead</role>
+				<role>developer</role>
 				<role>debugger</role>
 				<role>reviewer</role>
 				<role>support</role>
@@ -43,16 +43,16 @@
 			</roles>
 		</developer>
 		<developer>
-			<name>Deborah Schmidt</name>
-			<url>http://imagej.net/User:Frauzufall</url>
+			<id>ctrueden</id>
+			<name>Curtis Rueden</name>
+			<url>https://imagej.net/User:Rueden</url>
 			<roles>
-				<role>developer</role>
+				<role>founder</role>
 				<role>debugger</role>
 				<role>reviewer</role>
 				<role>support</role>
 				<role>maintainer</role>
 			</roles>
-			<properties><id>frauzufall</id></properties>
 		</developer>
 	</developers>
 	<contributors>
