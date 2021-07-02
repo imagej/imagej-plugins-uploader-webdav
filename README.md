@@ -1,4 +1,4 @@
-[![](https://travis-ci.org/imagej/imagej-plugins-uploader-webdav.svg?branch=master)](https://travis-ci.org/imagej/imagej-plugins-uploader-webdav)
+[![](https://github.com/imagej/imagej-plugins-uploader-webdav/actions/workflows/build-main.yml/badge.svg)](https://github.com/imagej/imagej-plugins-uploader-webdav/actions/workflows/build-main.yml)
 
 ImageJ Plugins: Uploader: WebDAV
 --------------------------------
