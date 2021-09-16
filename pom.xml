@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>org.scijava</groupId>
 		<artifactId>pom-scijava</artifactId>
-		<version>27.0.1</version>
+		<version>31.1.0</version>
 		<relativePath />
 	</parent>
 
@@ -159,6 +159,11 @@ Institute of Molecular Cell Biology and Genetics.</license.copyrightOwners>
 			<classifier>tests</classifier>
 			<scope>test</scope>
 		</dependency>
+		<dependency>
+			<groupId>commons-logging</groupId>
+			<artifactId>commons-logging</artifactId>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 
 	<build>
@@ -166,7 +171,6 @@ Institute of Molecular Cell Biology and Genetics.</license.copyrightOwners>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-failsafe-plugin</artifactId>
-				<version>2.14</version>
 				<executions>
 					<execution>
 						<goals>
