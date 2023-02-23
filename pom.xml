@@ -30,22 +30,9 @@
 
 	<developers>
 		<developer>
-			<id>frauzufall</id>
-			<name>Deborah Schmidt</name>
-			<url>https://imagej.net/User:Frauzufall</url>
-			<roles>
-				<role>lead</role>
-				<role>developer</role>
-				<role>debugger</role>
-				<role>reviewer</role>
-				<role>support</role>
-				<role>maintainer</role>
-			</roles>
-		</developer>
-		<developer>
 			<id>ctrueden</id>
 			<name>Curtis Rueden</name>
-			<url>https://imagej.net/User:Rueden</url>
+			<url>https://imagej.net/people/ctrueden</url>
 			<roles>
 				<role>founder</role>
 				<role>debugger</role>
@@ -58,9 +45,22 @@
 	<contributors>
 		<contributor>
 			<name>Johannes Schindelin</name>
-			<url>https://imagej.net/User:Schindelin</url>
+			<url>https://imagej.net/people/dscho</url>
 			<roles><role>founder</role></roles>
 			<properties><id>dscho</id></properties>
+		</contributor>
+		<contributor>
+			<name>Deborah Schmidt</name>
+			<url>https://imagej.net/people/frauzufall</url>
+			<properties><id>frauzufall</id></properties>
+			<roles>
+				<role>lead</role>
+				<role>developer</role>
+				<role>debugger</role>
+				<role>reviewer</role>
+				<role>support</role>
+				<role>maintainer</role>
+			</roles>
 		</contributor>
 	</contributors>
 
